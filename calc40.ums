@@ -1,0 +1,404 @@
+//Devon Ramsey and Conor Jenkinson
+//December 9th, 2016
+//Summary: Implemented a calculator that handles inputs in
+//reverse polish notation.
+
+//r1 is mostly used as general purpose but when called using linking
+//it holds the return address and therefore has to be perserved
+//r2 holds the stack pointer
+//r3 holds the size of the stack
+//r4 hold the current state, but sometimes used as non volatile
+//general purpose register. r4 is 0 if in waiting and 1 if in entering
+//r5 is volitile register that is not saved or restored
+//r6 and r7 are volitile registers that aren't saved or restored,
+//and are temp registers
+
+.temp r6, r7
+.zero r0
+.section init
+r0:= 0
+r3:= 0
+.section rodata
+jumptable:
+.space 256        
+
+.section init
+
+init_table:
+        r4:= 255
+        goto fill_error_spaces
+//Fills every jumptable value with input_error so that
+//unsupported commands will result in an error
+fill_error_spaces:
+        r5:= jumptable + r4
+        m[r0][r5] := input_error
+        if (r4 == 0) goto fill_char_spaces
+        r4:= r4 - 1
+        goto fill_error_spaces
+//Fills supported commands with their respective labels. Leaves
+//unsupported commands as input_error
+fill_char_spaces:
+
+        m[r0][jumptable + '0'] := digit
+        m[r0][jumptable + '1'] := digit
+        m[r0][jumptable + '2'] := digit
+        m[r0][jumptable + '3'] := digit
+        m[r0][jumptable + '4'] := digit
+        m[r0][jumptable + '5'] := digit
+        m[r0][jumptable + '6'] := digit
+        m[r0][jumptable + '7'] := digit
+        m[r0][jumptable + '8'] := digit
+        m[r0][jumptable + '9'] := digit
+
+        m[r0][jumptable + '+'] := add
+        m[r0][jumptable + '-'] := sub
+        m[r0][jumptable + '*'] := mult
+        m[r0][jumptable + '/'] := div
+        m[r0][jumptable + '|'] := bor
+        m[r0][jumptable + '&'] := band   
+
+        m[r0][jumptable + 'c'] := csign
+        m[r0][jumptable + '~'] := comp
+        m[r0][jumptable + 's'] := swap
+        m[r0][jumptable + 'd'] := duplicate
+        m[r0][jumptable + 'p'] := popv
+        m[r0][jumptable + 'z'] := clear
+        m[r0][jumptable + ' '] := waiting
+        m[r0][jumptable + '\n']:= print
+
+
+.section text
+//goes to initial waiting state
+main:
+        goto waiting
+
+//came from a function that wasn't digit
+waiting:
+        r4:= 0 //set waiting state
+        r1 := input()
+
+        goto waiting_with_character
+
+//came from a digit
+entering:
+        r4:= 1 //set entering state
+        r1 := input()
+        goto waiting_with_character
+
+//goes to the correct function in the jumptable given input
+waiting_with_character:
+        r5 := r1 + 1
+        if (r5 == 0) goto end_program
+        r5 := jumptable + r1
+        r5 := m[r0][r5]
+        goto r5
+
+//checks to see if it came from waiting or entering state and calls the 
+//corresponding function
+digit:
+        if (r4==0) goto digit_wait
+        goto digit_enter
+
+//puts the decimal equivalent of value on the stack
+digit_wait:
+        r5:= r1 - '0'
+        push r5 on stack r2
+        r3:= r3 + 1
+        goto entering
+//converts the input to its decimal equivalent (ex. '1' = 1) then
+//multiplies the last value on the stack by 10 and puts the input in the one's
+//place. Must have followed another digit (entering)
+digit_enter:
+        r1:= r1 - '0' //decimal equivalent
+        pop r5 off stack r2
+        r5 := r5 * 10
+        r5 := r5 + r1
+        push r5 on stack r2
+        goto entering
+
+//print function that is recursively called to print each value on the stack
+print_recur:
+        r5:= r1 - r3
+        if (r5 == 0) goto waiting
+        r5:= r1 + r2
+        r5:= m[r0][r5]
+        push r1 on stack r2
+        goto printd linking r1
+        pop r1 off stack r2
+        
+        r1:= r1 + 1 
+        output "\n"
+        goto print_recur
+
+//initialized the counter to 0 and then calls the recursive printing function
+//to print the entire stack.
+print:
+        r1:= 0
+        goto print_recur
+
+//checks if two values are on the stack , if it does it pops y
+//from the value stack, then x and pushs x + y onto the stack
+add:
+        push r1 on stack r2
+        goto check_two linking r1
+        pop r1 off stack r2
+
+        pop r1 off stack r2
+        pop r5 off stack r2
+        r1:= r1 + r5
+        push r1 on stack r2
+        r3 := r3 - 1
+        goto waiting
+
+//checks to make sure two values are on the stack. If it does it pops y
+//from the value stack, then x and pushs x - y onto the stack. Sends error
+//message if too few values
+sub:
+        push r1 on stack r2
+        goto check_two linking r1
+        pop r1 off stack r2
+
+        pop r1 off stack r2
+        pop r5 off stack r2
+        r1:= r5 - r1
+        push r1 on stack r2
+        r3 := r3 - 1
+        goto waiting
+
+//checks to make sure two values are on the stack. If it does it pops y
+//from the value stack, then x and pushs x * y onto the stack. Sends error 
+//message if too few values
+mult:
+        push r1 on stack r2
+        goto check_two linking r1
+        pop r1 off stack r2
+        
+        pop r1 off stack r2
+        pop r5 off stack r2
+        r1:= r1 * r5
+        push r1 on stack r2
+        r3 := r3 - 1
+        goto waiting
+
+//checks to make sure two values are on the stack If it does it pops y
+//from the value stack, then x. It then pushes the value x/y onto the stack
+//with the correct sign. Sends error message if too few values or trying
+//to divide by zero
+div:
+        push r1 on stack r2
+        goto check_two linking r1
+        pop r1 off stack r2
+
+        pop r5 off stack r2
+        pop r1 off stack r2
+        if (r5 == 0) goto zero_error
+        push r4 on stack r2 
+        r4:= r5 & 2147483648 // should be 0 if positive
+        if (r4 != 0) goto div_y_neg
+        r4:= r1 & 2147483648 //should be 0 if positive
+        if (r4 != 0) goto div_x_neg
+        r1:= r1 / r5
+        pop r4 off stack r2
+        push r1 on stack r2
+        r3 := r3 - 1
+        goto waiting
+
+//Called if y is negative. Goes to div_both neg if both values are negative
+//but otherwise pushes the correct negative value of r5/r1
+div_y_neg:
+        r4:= r1 & 2147483648
+        if (r4 != 0) goto div_both_neg //then both values would be negative
+        r5:= ~r5
+        r5:= r5 + 1
+        r1:= r1 / r5
+        r1:= ~r1
+        r1:= r1 + 1
+        pop r4 off stack r2
+        push r1 on stack r2
+        r3:= r3 - 1 
+        goto waiting
+
+//turns the r1(the second value: x) and turns it positive, then computes 
+//r1/r5 (x/y), turns the answer negative, and pushes it on the stack
+div_x_neg:
+        r1:= ~r1
+        r1:= r1 + 1
+        r1:= r1 / r5
+        r1:= ~r1
+        r1:= r1 + 1
+        pop r4 off stack r2
+        push r1 on stack r2
+        r3:= r3 - 1 
+        goto waiting
+
+//changes both values to positive and then computes r1/r5 (x/y) and pushes
+//it onto the stack
+div_both_neg:
+        r1:= ~r1
+        r1:= r1 + 1
+        r5:= ~r5
+        r5:= r5 + 1
+        r1:= r1 / r5
+        pop r4 off stack r2
+        push r1 on stack r2
+        r3:= r3 - 1
+        goto waiting
+
+//checks to make sure two values are on the stack. If it does it pops y
+//from the value stack, then x and pushs x | y onto the stack. Prints
+//an error message if too few values
+bor:
+        push r1 on stack r2
+        goto check_two linking r1
+        pop r1 off stack r2
+        
+        pop r1 off stack r2
+        pop r5 off stack r2
+        r1:= r1 | r5
+        push r1 on stack r2
+        r3 := r3 - 1
+        goto waiting
+
+//checks to make sure two values are on the stack. If it does it pops y
+//from the value stack, then x and pushs x & y onto the stack. Prints
+//an error message if too few values
+band:
+        push r1 on stack r2
+        goto check_two linking r1
+        pop r1 off stack r2
+        
+        pop r1 off stack r2
+        pop r5 off stack r2
+        r1:= r1 & r5
+        push r1 on stack r2
+        r3 := r3 - 1
+        goto waiting
+
+//checks to make sure one value is on the stack. If so, it pops x
+//from the value stack and pushs  negative x onto the stack. Prints
+//an error message if too few values
+csign:
+        push r1 on stack r2
+        goto check_one linking r1
+        pop r1 off stack r2      
+
+        pop r1 off stack r2
+        r1 := ~r1
+        r1 := r1 + 1
+        push r1 on stack r2
+        goto waiting
+
+//checks to make sure two values are on the stack. If it does it pops y
+//from the value stack, then x and pushs x + y onto the stack
+comp:
+        push r1 on stack r2
+        goto check_one linking r1
+        pop r1 off stack r2
+        
+        pop r1 off stack r2
+        r1 := ~r1
+        push r1 on stack r2
+        goto waiting
+
+//checks to make sure two values are on the stack. If it does it pops y
+//from the value stack, then pushes y and push x to reverse the order
+//on the stack. Prints an error message if too few values.
+swap:
+        push r1 on stack r2
+        goto check_two linking r1
+        pop r1 off stack r2
+        
+        pop r1 off stack r2
+        pop r5 off stack r2
+        push r1 on stack r2
+        push r5 on stack r2
+        goto waiting
+
+//checks to make sure one value is on the stack. If it does it pops x
+//from the value stack, then pushs x twice to duplicate the value
+//on the stack. Prints an error message if too few values.
+duplicate:
+        push r1 on stack r2
+        goto check_one linking r1
+        pop r1 off stack r2
+        
+        pop r1 off stack r2
+        r5 := r1
+        push r5 on stack r2
+        push r1 on stack r2
+        r3 := r3 + 1
+        goto waiting
+
+//checks to make sure one value is on the stack. If it does it pops x
+//from the value stack, in order to remove it. Prints an error message 
+//if too few values.
+popv:
+        push r1 on stack r2
+        goto check_one linking r1
+        pop r1 off stack r2
+        
+        pop r1 off stack r2
+        r3 := r3 - 1
+        goto waiting
+
+//clears the stack
+clear:
+        pop r1 off stack r2
+        r3 := r3 - 1
+        if (r3 != 0) goto clear
+
+//checks to see if two values are on the stack. If not prints an error
+//message and goes to waiting. If so it returns to the function in which
+//it was called
+check_two:
+        push r1 on stack r2
+        if (r3 == 0) goto stack_underflow_2
+        r1:= r3 - 1
+        if (r1 == 0) goto stack_underflow_2
+        pop r5 off stack r2
+        goto r5
+
+//checks to see if one value is on the stack. If not prints an error
+//message and goes to waiting. If so it returns to the function in which
+//it was called
+check_one:
+        push r1 on stack r2
+        if (r3 == 0) goto stack_underflow_1
+        pop r5 off stack r2
+        goto r5
+
+//prints the stack underflow error message for two needed and 
+//goes to to waiting       
+stack_underflow_2:
+
+        output "Stack underflow---expected at least 2 elements\n"
+        pop r5 off stack r2 //get rid of return address
+        pop r5 off stack r2 //get rid of original r1
+        goto waiting
+
+//prints the stack underflow error message for one needed and 
+//goes to to waiting 
+stack_underflow_1:
+        output "Stack underflow---expected at least 1 element\n"
+
+        pop r5 off stack r2 //get rid of return address
+        pop r5 off stack r2 //get rid of original r1
+
+        goto waiting
+
+//prints "Division by zero" error message and goes to to waiting
+zero_error:
+        output "Division by zero\n"
+
+        push r1 on stack r2 //pushes x back onto the stack
+        push r5 on stack r2 //pushes y back onto the stack
+
+        goto waiting
+//prints "Unkown character" error message and goes to waiting
+input_error:
+        output "Unknown character '"
+        output r1
+        output "'\n"
+        goto waiting
+end_program:
+        halt

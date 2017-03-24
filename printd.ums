@@ -1,0 +1,60 @@
+//Devon Ramsey and Conor Jenkinson
+//December 9th, 2016
+//Summary: print a number, positive or negative of any length less 
+//than 2147483647
+//and greater than -2147483648
+
+//r1, r3, r5 are volatile registers used for computations
+//r2 is the stack pointer
+//r4 holds number of digits in given value
+//r6, r7 are temporary registers
+
+.temp r6, r7
+.zero r0
+.section text
+//Initial function called for all printing. Determines if the given value is
+//positive, negative, or 0 and calls the relevant function.
+printd:
+	push r1 on stack r2
+	push r3 on stack r2
+	push r4 on stack r2
+	push r5 on stack r2
+	output ">>> "
+	r1:= r5
+	r4:= 0   
+        r5:= r1 & 2147483648 //most significant bit so 1 if negative
+        if (r5 != 0) goto print_neg
+        if (r5 == 0) goto stack_pos
+//Prints a negative sign and flips then passes the value to 
+//stack_pos as a positive number        
+print_neg:
+        output '-'
+        r1:= ~ r1
+        r1:= r1 + 1
+        goto stack_pos
+//Recursively pushes each digit onto the value stack. 
+//Finishes after each digit is pushed or when the digit / 10 = 0.         
+stack_pos:
+	r5:= r1 / 10
+	r3:= r5 * 10
+	r3:= r1 - r3 // removes everything but the lest significant digit
+	r3:= r3 + '0'
+	push r3 on stack r2
+	r4:= r4 + 1 //counts the number of digits
+	if (r5 == 0) goto print_num
+	r1:= r5
+	goto stack_pos
+//Recursively prints each digit on the stack based on the number of digits
+//held in r4. Goes to done when it is finished printing.	
+print_num:
+	if (r4 == 0) goto done
+	pop r1 off stack r2
+	output r1
+	r4:= r4 - 1
+	goto print_num	
+done: 
+	pop r5 off stack r2
+	pop r4 off stack r2
+	pop r3 off stack r2
+	pop r1 off stack r2
+	goto r1

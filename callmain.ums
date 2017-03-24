@@ -1,0 +1,9 @@
+//Devon Ramsey and Conor Jenkinson
+//December 9th, 2016
+//declares temps and zero
+//then goes to main
+
+.temps r6, r7
+.zero r0
+.section init
+        goto main

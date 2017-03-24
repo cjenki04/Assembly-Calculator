@@ -1,0 +1,10 @@
+//Devon Ramsey and Conor Jenkinson
+//December 9th, 2016
+//initializes the stack 
+
+.zero r0
+.section data
+.space 100000  
+endstack:
+.section init
+r2 := endstack 

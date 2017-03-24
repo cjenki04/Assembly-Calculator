@@ -1,0 +1,11 @@
+HW 8: Rpn Calculator
+Conor Jenkinson and Devon Ramsey
+To our knowledge, everything has been correctly implemented
+We have not deviated from the recommended calling convention
+Print Module: Out print module is run recursively and passes all values on
+the stack to out printd function where we determine if each number is 
+positive, negative, or 0 and print it accordingly based on how many
+digits it has which we obtain by repeatedly dividing by 10.
+Analyzing the assignment: 3 Hours
+Writing assembly code: 10 Hours
+Debugging: 3 Hours
